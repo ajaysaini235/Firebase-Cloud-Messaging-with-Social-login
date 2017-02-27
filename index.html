@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <!-- Material Design Theming -->
+    <link rel="stylesheet" href="https://code.getmdl.io/1.1.3/material.orange-indigo.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <script defer src="https://code.getmdl.io/1.1.3/material.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/3.6.9/firebase.js"></script>
+    <script>
+    var SOCIAL_LOGIN = {
+        loginStyle: "signInWithPopup", // "signInWithRedirect"
+        config: {
+            apiKey: "",
+            authDomain: "",
+            databaseURL: "",
+            storageBucket: "",
+            messagingSenderId: ""
+        },
+        init: function() {
+            var mode = SOCIAL_LOGIN.getParameterByName('mode'),
+                actionCode = SOCIAL_LOGIN.getParameterByName('oobCode'),
+                apiKey = SOCIAL_LOGIN.getParameterByName('apiKey');
+
+
+            if (mode != '' && actionCode != '' && apiKey != '') {
+                SOCIAL_LOGIN._redirectHandler(mode, actionCode, apiKey);
+            } else {
+                firebase.initializeApp(SOCIAL_LOGIN.config);
+            }
+
+            window.onload = function() {
+                SOCIAL_LOGIN._initApp();
+            };
+        },
+        _initApp: function() {
+            firebase.auth().onAuthStateChanged(function(user) {
+                if (user) {
+                    SOCIAL_LOGIN.onAuthStateChanged(true, user);
+                } else {
+                    SOCIAL_LOGIN.onAuthStateChanged(false);
+                }
+            });
+        },
+        onAuthStateChanged: function(status) {
+            console.log(status);
+        },
+        login(provider, callback, email, password) {
+            provider = SOCIAL_LOGIN._getProvider(provider, email, password);
+            if (provider != "password") {
+                firebase.auth()[SOCIAL_LOGIN.loginStyle](provider).then(function(result) {
+                    if (callback)
+                        callback(true, result);
+                }).catch(function(error) {
+                    if (callback)
+                        callback(false, error);
+                });
+            } else {
+                provider.then(function(result) {
+                    if (callback)
+                        callback(true, result);
+                }).catch(function(error) {
+                    if (callback)
+                        callback(false, error);
+                });
+            }
+        },
+        signup: function(email, password, callback) {
+            firebase.auth().createUserWithEmailAndPassword(email, password).then(function(result) {
+                if (callback)
+                    callback(true, result);
+            }).catch(function(error) {
+                if (callback)
+                    callback(false, error);
+            });
+        },
+        logout: function(callback) {
+            firebase.auth().signOut().then(function() {
+                if (callback)
+                    callback(true, "Sign-out successful");
+            }, function(error) {
+                if (callback)
+                    callback(false, "An error happened");
+            });
+        },
+        sendEmailVerification: function(cb) {
+            if (!firebase.auth().currentUser.emailVerified) {
+                firebase.auth().currentUser.sendEmailVerification().then(function() {
+                    cb({
+                        "status": true,
+                        "message": "Email Verification Sent!"
+                    });
+                });
+            } else {
+                cb({
+                    "status": false,
+                    "message": "Email Already Verified"
+                });
+            }
+        },
+        sendPasswordReset: function(email, cb) {
+            firebase.auth().sendPasswordResetEmail(email).then(function() {
+                cb({
+                    "status": true,
+                    "message": "Password Reset Email Sent!"
+                });
+            }).catch(function(error) {
+                cb({
+                    "status": false,
+                    "message": error.message,
+                    error: error
+                });
+            });
+        },
+        _getProvider: function(t, email, password) {
+            var provider = new firebase.auth.GoogleAuthProvider();
+            switch (t) {
+                case "google":
+                    provider = new firebase.auth.GoogleAuthProvider();
+                    break;
+                case "github":
+                    provider = new firebase.auth.GithubAuthProvider();
+                    break;
+                case "twitter":
+                    provider = new firebase.auth.TwitterAuthProvider();
+                    break;
+                case "facebook":
+                    provider = new firebase.auth.FacebookAuthProvider();
+                    break;
+                case "password":
+                    provider = new firebase.auth().signInWithEmailAndPassword(email, password);
+                    break;
+            }
+            return provider;
+        },
+        _handleVerifyEmail: function(auth, actionCode) {
+            auth.applyActionCode(actionCode).then(function(resp) {
+                console.log(resp);
+            }).catch(function(error) {
+                console.log(error);
+            });
+        },
+        _handleResetPassword: function(auth, actionCode) {
+            auth.verifyPasswordResetCode(actionCode).then(function(email) {
+                var user = {
+                    "auth": auth,
+                    "email": email,
+                    "actionCode": actionCode
+                };
+                SOCIAL_LOGIN.handleResetPassword(user, "update");
+            }).catch(function(error) {
+                // Invalid or expired action code. Ask user to try to reset the password
+                // again.
+            });
+        },
+        updatePassword: function(user, newPassword) {
+            // Save the new password.
+            user.auth.confirmPasswordReset(user.actionCode, newPassword)
+                .then(function(resp) {
+                    user.auth.signInWithEmailAndPassword(user.email, newPassword);
+                }).catch(function(error) {
+                    SOCIAL_LOGIN.handleResetPassword(user, "error", error);
+                });
+        },
+        handleResetPassword: function(user, eventType, error) {
+            switch (eventType) {
+                case "update":
+                    SOCIAL_LOGIN.updatePassword(user, "123456");
+                    break;
+                case "error":
+                    console.log(error);
+                    break;
+            }
+        },
+        _handleRecoverEmail: function(auth, actionCode) {
+
+        },
+        getParameterByName: function(name) {
+            name = name.replace(/[\[]/, "\\\[").replace(/[\]]/, "\\\]");
+            var regexS = "[\\?&]" + name + "=([^&#]*)";
+            var regex = new RegExp(regexS);
+            var results = regex.exec(window.location.href);
+            if (results == null) {
+                return "";
+            } else {
+                return decodeURIComponent(results[1].replace(/\+/g, " "));
+            }
+        },
+        _redirectHandler: function(mode, actionCode, apiKey) {
+            var config = {
+                'apiKey': apiKey
+            };
+
+            var app = firebase.initializeApp(config),
+                auth = app.auth();
+            switch (mode) {
+                case 'resetPassword':
+                    SOCIAL_LOGIN._handleResetPassword(auth, actionCode);
+                    break;
+                case 'recoverEmail':
+                    SOCIAL_LOGIN._handleRecoverEmail(auth, actionCode);
+                    break;
+                case 'verifyEmail':
+                    SOCIAL_LOGIN._handleVerifyEmail(auth, actionCode);
+                    break;
+                default:
+            }
+        },
+        getToken: function() {
+            firebase.auth().currentUser.getToken(true)
+                .then(function(idToken) {
+                    console.log(idToken);
+                }).catch(function(error) {
+                    console.log(error);
+                });
+        },
+        deleteAccount: function(cb) {
+            var user = firebase.auth().currentUser;
+            user.delete().then(function() {
+                cb(true, "Delete " + user.displayName + " Successfully");
+            }, function(error) {
+                cb(false, error);
+            });
+        },
+        reauthenticate: function(cb) {
+            var user = firebase.auth().currentUser;
+            var credential;
+            user.reauthenticate(credential).then(function() {
+                cb(true);
+            }, function(error) {
+                // An error happened.
+            });
+
+        }
+    }
+
+
+
+
+    /*  use cases */
+
+
+    /* initialize social login app */
+    document.addEventListener('DOMContentLoaded', function() {
+        SOCIAL_LOGIN.init();
+    }, false);
+
+
+    /* override  SOCIAL_LOGIN.onAuthStateChanged method that are trigger when user login or logout */
+    SOCIAL_LOGIN.onAuthStateChanged = function(status, user) {
+        if (status) {
+            var u = user.providerData[0];
+            var photoURL = "https://www.google.co.in/url?sa=i&rct=j&q=&esrc=s&source=images&cd=&cad=rja&uact=8&ved=0ahUKEwiftJuS3q_SAhWBsZQKHRI_AqgQjRwIBw&url=https%3A%2F%2Fgithub.com%2Fajaysaini235&psig=AFQjCNGXw5zXtLextBDnZzPEqmN4iX2GQg&ust=1488266293967998";
+            document.getElementById('userInfoimg').src = u.photoURL ? u.photoURL : photoURL;
+            document.getElementById('userInfoname').textContent = u.displayName;
+            document.getElementById('quickstart-account-details').textContent = JSON.stringify(user, null, 2);
+            document.getElementById('userInfo').style.display = 'block';
+        } else {
+            document.getElementById('userInfo').style.display = 'none';
+        }
+    };
+
+    /* override  SOCIAL_LOGIN.handleResetPassword method  */
+    /* SOCIAL_LOGIN.handleResetPassword = function(status, user) {
+         
+     };*/
+
+
+    /* provider mean login by like google ,facebook etc. */
+    function login(provider) {
+        var email = '',
+            password = '';
+        if (provider == "password") {
+            email = document.getElementById('email').value;
+            password = document.getElementById('password').value;
+            if (email.length < 4) {
+                alert('Please enter an email address.');
+                return;
+            }
+            if (password.length < 4) {
+                alert('Please enter a password.');
+                return;
+            }
+        }
+        SOCIAL_LOGIN.login(provider, function(status, result) {
+            console.log(result);
+        }, email, password);
+    }
+
+    /*  logout a loggedin user */
+    function logout() {
+        SOCIAL_LOGIN.logout();
+    }
+
+
+    /*  send Email Verification */
+    function sendEmailVerification() {
+        SOCIAL_LOGIN.sendEmailVerification(function(result) {
+            console.log(result);
+        });
+    }
+
+    /*  send Password Reset */
+    function sendPasswordReset() {
+        var email = document.getElementById('email').value;
+        SOCIAL_LOGIN.sendPasswordReset(email, function(result) {
+            console.log(result);
+        });
+    }
+
+    /*  create a user by email */
+    function signup() {
+        var email = document.getElementById('email').value;
+        var password = document.getElementById('password').value;
+        if (email.length < 4) {
+            alert('Please enter an email address.');
+            return;
+        }
+        if (password.length < 6) {
+            alert('Please enter a password.');
+            return;
+        }
+
+        SOCIAL_LOGIN.signup(email, password, function(result) {
+            console.log(result);
+        });
+    }
+
+    /*  Delete user */
+    function deleteMyAccount() {
+        SOCIAL_LOGIN.deleteAccount();
+    }
+    </script>
+</head>
+
+<body>
+    <div class="demo-layout mdl-layout mdl-js-layout mdl-layout--fixed-header">
+        <!-- Header section containing title -->
+        <header class="mdl-layout__header mdl-color-text--white mdl-color--light-blue-700">
+            <div class="mdl-cell mdl-cell--12-col mdl-cell--12-col-tablet mdl-grid">
+                <div class="mdl-layout__header-row mdl-cell mdl-cell--12-col mdl-cell--12-col-tablet mdl-cell--8-col-desktop">
+                </div>
+            </div>
+        </header>
+        <main class="mdl-layout__content mdl-color--grey-100">
+            <div class="mdl-cell mdl-cell--12-col mdl-cell--12-col-tablet mdl-grid">
+                <div class="mdl-card mdl-shadow--2dp mdl-cell mdl-cell--6-col mdl-cell--6-col-tablet mdl-cell--6-col-desktop">
+                    <div class="mdl-card__title mdl-color--light-blue-600 mdl-color-text--white">
+                        <h2 class="mdl-card__title-text">Social Login With</h2>
+                    </div>
+                    <div class="mdl-card__supporting-text mdl-color-text--grey-600">
+                        <br>
+                        <br>
+                        <input class="mdl-textfield__input" type="text" id="email" name="email" placeholder="Email" />
+                        <br>
+                        <br>
+                        <input class="mdl-textfield__input" type="password" id="password" name="password" placeholder="Password" />
+                        <br/>
+                        <br/>
+                        <button class="mdl-button mdl-js-button mdl-button--raised" onclick="login('password')">Sign In</button>
+                        <button class="mdl-button mdl-js-button mdl-button--raised" onclick="logout()">Signed out</button>
+                        <button class="mdl-button mdl-js-button mdl-button--raised" onclick="signup()">Sign Up</button>
+                        <br>
+                        <br>
+                        <button class="mdl-button mdl-js-button mdl-button--raised" onclick="sendEmailVerification()">Send Email Verification
+                        </button>
+                        <br>
+                        <br>
+                        <button class="mdl-button mdl-js-button mdl-button--raised" onclick="sendPasswordReset()">Send Password Reset Email</button>
+                        <br>
+                        <br>
+                        <button class="mdl-button mdl-js-button mdl-button--raised" onclick="login('google')">Google</button>
+                        <br>
+                        <br>
+                        <button class="mdl-button mdl-js-button mdl-button--raised" onclick="login('facebook')">Facebook</button>
+                        <br>
+                        <br>
+                        <button class="mdl-button mdl-js-button mdl-button--raised" onclick="login('twitter')"> Twitter</button>
+                        <br>
+                        <br>
+                        <button class="mdl-button mdl-js-button mdl-button--raised" onclick="login('github')">Github</button>
+                    </div>
+                </div>
+                <div class="mdl-card mdl-shadow--2dp mdl-cell mdl-cell--6-col mdl-cell--6-col-tablet mdl-cell--6-col-desktop">
+                    <div class="mdl-card__title mdl-color--light-blue-600 mdl-color-text--white">
+                        <h2 class="mdl-card__title-text">User Info</h2>
+                    </div>
+                    <div class="mdl-card__supporting-text mdl-color-text--grey-600">
+                        <div class="quickstart-user-details-container" id="userInfo">
+                            <img src="" id="userInfoimg" style="width: 100px;" />
+                            <br>
+                            <br>
+                            <span class="mdl-list__item-primary-content" id="userInfoname"></span>
+                            <pre id="quickstart-account-details"></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+
+</html>
